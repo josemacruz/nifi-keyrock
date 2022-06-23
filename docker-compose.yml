@@ -1,0 +1,93 @@
+# WARNING: Do not deploy this tutorial configuration directly to a production environment
+#
+# The tutorial docker-compose files have not been written for production deployment and will not 
+# scale. A proper architecture has been sacrificed to keep the narrative focused on the learning 
+# goals, they are just used to deploy everything onto a single Docker machine. All FIWARE components 
+# are running at full debug and extra ports have been exposed to allow for direct calls to services. 
+# They also contain various obvious security flaws - passwords in plain text, no load balancing,
+# no use of HTTPS and so on. 
+# 
+# This is all to avoid the need of multiple machines, generating certificates, encrypting secrets
+# and so on, purely so that a single docker-compose file can be read as an example to build on, 
+# not use directly. 
+# 
+# When deploying to a production environment, please refer to the Helm Repository
+# for FIWARE Components in order to scale up to a proper architecture:
+# 
+# see: https://github.com/FIWARE/helm-charts/
+#
+version: "3.3"
+services:
+
+  # Keyrock is an Identity Management Front-End
+  keyrock:
+    image: fiware/idm:8.1.0
+    container_name: fiware-keyrock
+    hostname: keyrock
+    networks:
+        default:
+            ipv4_address: 172.18.1.5
+    depends_on:
+        - mysql-db
+    ports:
+        - '3005:3005'
+        - '443:443'
+    environment:
+        - DEBUG=idm:*
+        - IDM_DB_HOST=mysql-db
+        - IDM_HOST=http://localhost:3005
+        - IDM_PORT=3005
+        # Development use only
+        # Use Docker Secrets for Sensitive Data
+        - IDM_DB_PASS=secret
+        - IDM_DB_USER=root
+        - IDM_ADMIN_USER=admin
+        - IDM_ADMIN_EMAIL=admin@test.com
+        - IDM_ADMIN_PASS=1234
+
+  nifi:
+    build: ./nifi
+    restart: always
+    ports:
+      - 8443:8443
+    environment:
+      - AUTH=tls
+      - KEYSTORE_PATH=/opt/secrets/keystore.jks
+      - KEYSTORE_TYPE=JKS
+      - KEYSTORE_PASSWORD=SuperSecret
+      - TRUSTSTORE_PATH=/opt/secrets/truststore.jks
+      - TRUSTSTORE_PASSWORD=SuperSecret
+      - TRUSTSTORE_TYPE=JKS
+      - INITIAL_ADMIN_IDENTITY=admin@test.com
+    networks:
+        default:
+            ipv4_address: 172.18.1.4
+
+  # Database
+  mysql-db:
+    restart: always
+    image: mysql:5.7
+    hostname: mysql-db
+    container_name: db-mysql
+    expose:
+        - '3306'
+    ports:
+        - '3306:3306'
+    networks:
+        default:
+            ipv4_address: 172.18.1.6
+    environment:
+        # Development use only
+        # Use Docker Secrets for Sensitive Data
+        - 'MYSQL_ROOT_PASSWORD=secret'
+        - 'MYSQL_ROOT_HOST=172.18.1.5'
+    volumes:
+        - mysql-db:/var/lib/mysql
+
+networks:
+    default:
+        ipam:
+            config:
+                - subnet: 172.18.1.0/24
+volumes:
+    mysql-db: ~
